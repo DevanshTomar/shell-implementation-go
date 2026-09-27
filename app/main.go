@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ var builtIn map[string]struct{} = map[string]struct{}{
 	"echo": struct{}{},
 	"exit": struct{}{},
 	"pwd":  struct{}{},
+	"cd":   struct{}{},
 }
 
 func handle(command, arguments string) {
@@ -47,6 +49,29 @@ func handle(command, arguments string) {
 			return
 		}
 		fmt.Println(wd)
+	case "cd":
+		args := strings.Split(arguments, " ")
+		if len(args) > 1 {
+			fmt.Printf("cd: too many arguments\n")
+			return
+		}
+
+		if len(args) == 0 || arguments == "~" {
+			dir, err := os.UserHomeDir()
+			if err != nil {
+				fmt.Printf("Failed to get home directory: %v\n", err)
+				return
+			}
+			os.Chdir(dir)
+		}
+
+		if err := os.Chdir(args[0]); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				fmt.Printf("cd: %s: No such file or directory\n", args[0])
+			} else {
+				fmt.Printf("Failed to change directory: %v\n", err)
+			}
+		}
 	default:
 		if _, err := exec.LookPath(command); err == nil {
 			argList := strings.Split(arguments, " ")
