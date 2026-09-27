@@ -40,7 +40,20 @@ func handle(command, arguments string) {
 	case "exit":
 		os.Exit(0)
 	default:
-		fmt.Printf("%s: command not found\n", command)
+		if _, err := exec.LookPath(command); err == nil {
+			argList := strings.Split(arguments, " ")
+			cmd := exec.Command(command, argList...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Printf("%s: command ran with error:\n", command)
+				return
+			}
+		} else {
+			fmt.Printf("%s: command not found\n", command)
+		}
+
 	}
 }
 
