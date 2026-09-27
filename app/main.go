@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -15,7 +16,8 @@ func main() {
 			os.Exit(1)
 		}
 
-		command := readString[:len(readString)-1]
+		userInput := readString[:len(readString)-1]
+		command, _, _ := strings.Cut(userInput, " ") // extracting the command and arguments
 
 		switch command {
 		case "exit":
