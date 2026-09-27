@@ -63,14 +63,14 @@ func handle(command, arguments string) {
 				fmt.Printf("Failed to get home directory: %v\n", err)
 				return
 			}
-			os.Chdir(dir)
+			args[0] = dir
 		}
 
 		cleanedPath := path.Clean(args[0])
-
 		if !path.IsAbs(cleanedPath) {
 			wd, err := os.Getwd()
 			if err != nil {
+				fmt.Printf("Failed to get current working directory: %v\n", err)
 				return
 			}
 			cleanedPath = path.Join(wd, cleanedPath)
