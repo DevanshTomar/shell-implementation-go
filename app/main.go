@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 )
 
@@ -65,7 +66,17 @@ func handle(command, arguments string) {
 			os.Chdir(dir)
 		}
 
-		if err := os.Chdir(args[0]); err != nil {
+		cleanedPath := path.Clean(args[0])
+
+		if !path.IsAbs(cleanedPath) {
+			wd, err := os.Getwd()
+			if err != nil {
+				return
+			}
+			cleanedPath = path.Join(wd, cleanedPath)
+		}
+
+		if err := os.Chdir(cleanedPath); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				fmt.Printf("cd: %s: No such file or directory\n", args[0])
 			} else {
