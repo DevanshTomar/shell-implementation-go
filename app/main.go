@@ -16,10 +16,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		userInput := readString[:len(readString)-1]
-		command, _, _ := strings.Cut(userInput, " ") // extracting the command and arguments
+		userInput := strings.TrimSpace(readString[:len(readString)-1])
+		command, arguments, _ := strings.Cut(userInput, " ") // extracting the command and arguments
 
 		switch command {
+		case "echo":
+			fmt.Println(arguments)
 		case "exit":
 			os.Exit(0)
 		default:
