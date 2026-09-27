@@ -12,6 +12,7 @@ var builtIn map[string]struct{} = map[string]struct{}{
 	"type": struct{}{},
 	"echo": struct{}{},
 	"exit": struct{}{},
+	"pwd":  struct{}{},
 }
 
 func handle(command, arguments string) {
@@ -39,6 +40,13 @@ func handle(command, arguments string) {
 		}
 	case "exit":
 		os.Exit(0)
+	case "pwd":
+		wd, err := os.Getwd()
+		if err != nil {
+			fmt.Printf("Failed to get PWD: %v\n", err)
+			return
+		}
+		fmt.Println(wd)
 	default:
 		if _, err := exec.LookPath(command); err == nil {
 			argList := strings.Split(arguments, " ")
@@ -47,7 +55,7 @@ func handle(command, arguments string) {
 			cmd.Stderr = os.Stderr
 			err := cmd.Run()
 			if err != nil {
-				fmt.Printf("%s: command ran with error:\n", command)
+				fmt.Printf("%s: command ran with error: %s\n", command, err)
 				return
 			}
 		} else {
