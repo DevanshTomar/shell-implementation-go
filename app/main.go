@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 )
 
-var builtIn map[string]struct{} = map[string]struct{}{
+var builtIn = map[string]struct{}{
 	"type": {},
 	"echo": {},
 	"exit": {},
@@ -19,52 +19,87 @@ var builtIn map[string]struct{} = map[string]struct{}{
 }
 
 // parseArguments tokenizes a command string into discrete arguments,
-// properly honoring single and double quotes while preserving spaces inside them.
+// properly handling single quotes, double quotes, and backslash escapes.
 func parseArguments(input string) []string {
 	var args []string
 	var current strings.Builder
-	inSingleQuotes := false
-	inDoubleQuotes := false
-	hasToken := false
+	inSingle := false
+	inDouble := false
+	escaped := false
+	inToken := false
 
 	for _, r := range input {
-		if inSingleQuotes {
-			if r == '\'' {
-				inSingleQuotes = false
-			} else {
-				current.WriteRune(r)
-				hasToken = true
-			}
-		} else if inDoubleQuotes {
-			if r == '"' {
-				inDoubleQuotes = false
-			} else {
-				current.WriteRune(r)
-				hasToken = true
-			}
-		} else {
-			switch r {
-			case '\'':
-				inSingleQuotes = true
-				hasToken = true
-			case '"':
-				inDoubleQuotes = true
-				hasToken = true
-			case ' ', '\t':
-				if hasToken {
-					args = append(args, current.String())
-					current.Reset()
-					hasToken = false
+		if escaped {
+			if inDouble {
+				// Inside double quotes, \ only escapes $, `, ", \, and newline.
+				switch r {
+				case '"', '\\', '$', '`':
+					current.WriteRune(r)
+				default:
+					current.WriteRune('\\')
+					current.WriteRune(r)
 				}
+			} else {
+				current.WriteRune(r)
+			}
+			escaped = false
+			inToken = true
+			continue
+		}
+
+		if inSingle {
+			if r == '\'' {
+				inSingle = false
+			} else {
+				current.WriteRune(r)
+			}
+			continue
+		}
+
+		if inDouble {
+			switch r {
+			case '"':
+				inDouble = false
+			case '\\':
+				escaped = true
 			default:
 				current.WriteRune(r)
-				hasToken = true
 			}
+			continue
+		}
+
+		// Unquoted context
+		switch r {
+		case '\'':
+			inSingle = true
+			inToken = true
+		case '"':
+			inDouble = true
+			inToken = true
+		case '\\':
+			escaped = true
+			inToken = true
+		case ' ', '\t':
+			if inToken {
+				args = append(args, current.String())
+				current.Reset()
+				inToken = false
+			}
+		default:
+			current.WriteRune(r)
+			inToken = true
 		}
 	}
-	if hasToken {
+
+	// Flushing trailing escaped character if input ended with a dangling backslash
+	if escaped {
+		current.WriteRune('\\')
+	}
+
+	if inToken {
 		args = append(args, current.String())
 	}
+
 	return args
 }
 
@@ -80,12 +115,10 @@ func handle(command string, args []string) {
 		for _, arg := range args {
 			if _, ok := builtIn[arg]; ok {
 				fmt.Printf("%s is a shell builtin\n", arg)
+			} else if p, err := exec.LookPath(arg); err == nil {
+				fmt.Printf("%s is %s\n", arg, p)
 			} else {
-				if p, err := exec.LookPath(arg); err == nil {
-					fmt.Printf("%s is %s\n", arg, p)
-				} else {
-					fmt.Printf("%s: not found\n", arg)
-				}
+				fmt.Printf("%s: not found\n", arg)
 			}
 		}
 	case "exit":
@@ -99,7 +132,7 @@ func handle(command string, args []string) {
 		fmt.Println(wd)
 	case "cd":
 		if len(args) > 1 {
-			fmt.Printf("cd: too many arguments\n")
+			fmt.Println("cd: too many arguments")
 			return
 		}
 
@@ -111,38 +144,45 @@ func handle(command string, args []string) {
 				return
 			}
 			targetDir = dir
+		} else if strings.HasPrefix(args[0], "~/") {
+			dir, err := os.UserHomeDir()
+			if err != nil {
+				fmt.Printf("Failed to get home directory: %v\n", err)
+				return
+			}
+			targetDir = filepath.Join(dir, args[0][2:])
 		} else {
 			targetDir = args[0]
 		}
 
-		cleanedPath := path.Clean(targetDir)
-		if !path.IsAbs(cleanedPath) {
+		cleanedPath := filepath.Clean(targetDir)
+		if !filepath.IsAbs(cleanedPath) {
 			wd, err := os.Getwd()
 			if err != nil {
 				fmt.Printf("Failed to get current working directory: %v\n", err)
 				return
 			}
-			cleanedPath = path.Join(wd, cleanedPath)
+			cleanedPath = filepath.Join(wd, cleanedPath)
 		}
 
 		if err := os.Chdir(cleanedPath); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				fmt.Printf("cd: %s: No such file or directory\n", targetDir)
 			} else {
-				fmt.Printf("Failed to change directory: %v\n", err)
+				fmt.Printf("cd: %v\n", err)
 			}
 		}
 	default:
-		if _, err := exec.LookPath(command); err == nil {
-			cmd := exec.Command(command, args...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-				fmt.Printf("%s: command ran with error: %s\n", command, err)
+		cmd := exec.Command(command, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		if err := cmd.Run(); err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				// Command executed but returned non-zero exit code
 				return
 			}
-		} else {
 			fmt.Printf("%s: command not found\n", command)
 		}
 	}
@@ -154,12 +194,12 @@ func main() {
 		fmt.Print("$ ")
 		readString, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading input: %s\n", err)
-			os.Exit(1)
+			// Handles EOF (Ctrl+D) gracefully
+			break
 		}
 
-		userInput := strings.TrimSpace(readString)
-		if len(userInput) == 0 {
+		userInput := strings.TrimRight(readString, "\r\n")
+		if len(strings.TrimSpace(userInput)) == 0 {
 			continue
 		}
 
@@ -168,9 +208,6 @@ func main() {
 			continue
 		}
 
-		command := tokens[0]
-		arguments := tokens[1:]
-
-		handle(command, arguments)
+		handle(tokens[0], tokens[1:])
 	}
 }
