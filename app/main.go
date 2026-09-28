@@ -38,7 +38,6 @@ func handle(command, arguments string) {
 				} else {
 					fmt.Printf("%s: not found\n", arg)
 				}
-
 			}
 		}
 	case "exit":
@@ -101,6 +100,35 @@ func handle(command, arguments string) {
 	}
 }
 
+func handleQuotes(arguments string) string {
+	var sb strings.Builder
+	var prev rune
+	parse := []rune(arguments)
+	for _, args := range parse {
+		if args == '\'' || prev == '\'' {
+			if args == '\'' {
+				prev = args
+				continue
+			}
+
+			sb.WriteString(string(args))
+		} else {
+			if args == '\'' {
+				continue
+			}
+
+			if args == ' ' && prev == ' ' {
+				continue
+			}
+
+			prev = args
+			sb.WriteString(string(args))
+		}
+	}
+
+	return sb.String()
+}
+
 func main() {
 	for {
 		fmt.Print("$ ")
@@ -112,7 +140,7 @@ func main() {
 
 		userInput := strings.TrimSpace(readString[:len(readString)-1])
 		command, arguments, _ := strings.Cut(userInput, " ") // extracting the command and arguments
-
+		arguments = handleQuotes(arguments)
 		handle(command, arguments)
 	}
 }
