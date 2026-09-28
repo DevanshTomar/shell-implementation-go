@@ -27,10 +27,7 @@ func parseArguments(input string) []string {
 	inDoubleQuotes := false
 	hasToken := false
 
-	runes := []rune(input)
-	for i := range runes {
-		r := runes[i]
-
+	for _, r := range input {
 		if inSingleQuotes {
 			if r == '\'' {
 				inSingleQuotes = false
